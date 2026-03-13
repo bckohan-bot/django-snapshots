@@ -83,6 +83,7 @@ INSTALLED_APPS = [
     "django_snapshots.import",
     "django_snapshots.export",
     "django_snapshots",
+    "django_typer",
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.sessions",
