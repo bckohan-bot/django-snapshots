@@ -17,12 +17,22 @@ from django_snapshots.exceptions import SnapshotConnectorError
 class SQLiteConnector:
     """Back up and restore SQLite databases using the stdlib ``sqlite3`` module."""
 
+    @staticmethod
+    def _connect(db_name: str) -> sqlite3.Connection:
+        # Django uses SQLite URI filenames (e.g. "file:memorydb_default?mode=memory&cache=shared")
+        # for in-memory shared-cache test databases. Python's sqlite3 only reliably
+        # interprets these as URIs when uri=True is explicitly passed; without it,
+        # Windows treats the string as a literal filename (containing illegal '?'),
+        # causing the connector to open a different database than Django's connection.
+        is_uri = db_name.startswith("file:")
+        return sqlite3.connect(db_name, uri=is_uri)
+
     def dump(self, db_alias: str, dest: Path) -> dict[str, Any]:
         """Dump the SQLite database for *db_alias* to a SQL script at *dest*."""
-        db_path = django_settings.DATABASES[db_alias]["NAME"]
+        db_path = str(django_settings.DATABASES[db_alias]["NAME"])
         dest.parent.mkdir(parents=True, exist_ok=True)
         try:
-            con = sqlite3.connect(str(db_path))
+            con = self._connect(db_path)
             with open(dest, "w", encoding="utf-8") as f:
                 for line in con.iterdump():
                     f.write(f"{line}\n")
@@ -35,7 +45,7 @@ class SQLiteConnector:
 
     def restore(self, db_alias: str, src: Path) -> None:
         """Restore the SQLite database for *db_alias* from the SQL script at *src*."""
-        db_path = django_settings.DATABASES[db_alias]["NAME"]
+        db_path = str(django_settings.DATABASES[db_alias]["NAME"])
         try:
             script = src.read_text(encoding="utf-8")
             # Close Django's connection before acquiring our own — on Windows,
@@ -44,7 +54,7 @@ class SQLiteConnector:
             from django.db import connections  # noqa: PLC0415
 
             connections[db_alias].close()
-            con = sqlite3.connect(str(db_path))
+            con = self._connect(db_path)
             # Drop all existing tables so the dump script can recreate them cleanly.
             cur = con.cursor()
             cur.execute("PRAGMA foreign_keys = OFF")
@@ -57,9 +67,7 @@ class SQLiteConnector:
             con.commit()
             con.executescript(script)
             con.close()
-            # Close Django's connection so the ORM sees the restored data.
-            from django.db import connections  # noqa: PLC0415
-
+            # Close Django's connection so the ORM reconnects and sees the restored data.
             connections[db_alias].close()
         except Exception as exc:
             raise SnapshotConnectorError(
