@@ -41,11 +41,7 @@ class PostgresConnector:
         """Dump the PostgreSQL database to *dest* using ``pg_dump``."""
         config = self._db_config(db_alias)
         dest.parent.mkdir(parents=True, exist_ok=True)
-        cmd = (
-            ["pg_dump", "--no-password"]
-            + self._base_args(config)
-            + [config["NAME"]]
-        )
+        cmd = ["pg_dump", "--no-password"] + self._base_args(config) + [config["NAME"]]
         try:
             with open(dest, "wb") as out:
                 subprocess.run(

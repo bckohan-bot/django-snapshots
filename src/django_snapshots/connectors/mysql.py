@@ -40,9 +40,7 @@ class MySQLConnector:
         cmd = ["mysqldump"] + self._base_args(config) + [config["NAME"]]
         try:
             with open(dest, "wb") as out:
-                subprocess.run(
-                    cmd, stdout=out, stderr=subprocess.PIPE, check=True
-                )
+                subprocess.run(cmd, stdout=out, stderr=subprocess.PIPE, check=True)
         except subprocess.CalledProcessError as exc:
             raise SnapshotConnectorError(
                 f"mysqldump failed for alias {db_alias!r}:\n"
