@@ -51,6 +51,10 @@ class SQLiteConnector:
             con.commit()
             con.executescript(script)
             con.close()
+            # Close Django's connection so the ORM sees the restored data.
+            from django.db import connections  # noqa: PLC0415
+
+            connections[db_alias].close()
         except Exception as exc:
             raise SnapshotConnectorError(
                 f"SQLite restore failed for alias {db_alias!r}: {exc}"

@@ -37,13 +37,12 @@ class MySQLConnector:
         """Dump the MySQL/MariaDB database to *dest* using ``mysqldump``."""
         config = self._db_config(db_alias)
         dest.parent.mkdir(parents=True, exist_ok=True)
-        cmd = (
-            ["mysqldump"]
-            + self._base_args(config)
-            + ["--result-file", str(dest), config["NAME"]]
-        )
+        cmd = ["mysqldump"] + self._base_args(config) + [config["NAME"]]
         try:
-            subprocess.run(cmd, check=True, capture_output=True)
+            with open(dest, "wb") as out:
+                subprocess.run(
+                    cmd, stdout=out, stderr=subprocess.PIPE, check=True
+                )
         except subprocess.CalledProcessError as exc:
             raise SnapshotConnectorError(
                 f"mysqldump failed for alias {db_alias!r}:\n"

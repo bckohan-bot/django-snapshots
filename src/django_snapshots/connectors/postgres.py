@@ -44,10 +44,17 @@ class PostgresConnector:
         cmd = (
             ["pg_dump", "--no-password"]
             + self._base_args(config)
-            + ["-f", str(dest), config["NAME"]]
+            + [config["NAME"]]
         )
         try:
-            subprocess.run(cmd, env=self._env(config), check=True, capture_output=True)
+            with open(dest, "wb") as out:
+                subprocess.run(
+                    cmd,
+                    env=self._env(config),
+                    stdout=out,
+                    stderr=subprocess.PIPE,
+                    check=True,
+                )
         except subprocess.CalledProcessError as exc:
             raise SnapshotConnectorError(
                 f"pg_dump failed for alias {db_alias!r}:\n"
