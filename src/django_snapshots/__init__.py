@@ -49,6 +49,16 @@ from django_snapshots.storage import (
     LocalFileSystemBackend,
     SnapshotStorage,
 )
+from django_snapshots.artifacts import (
+    AnyArtifactExporter,
+    AnyArtifactImporter,
+    ArtifactExporter,
+    ArtifactExporterBase,
+    ArtifactImporter,
+    ArtifactImporterBase,
+    AsyncArtifactExporter,
+    AsyncArtifactImporter,
+)
 
 __all__ = [
     # Metadata
@@ -83,4 +93,13 @@ __all__ = [
     "PostgresConnector",
     "MySQLConnector",
     "DjangoDumpDataConnector",
+    # Artifact Protocols
+    "ArtifactExporterBase",
+    "ArtifactExporter",
+    "AsyncArtifactExporter",
+    "AnyArtifactExporter",
+    "ArtifactImporterBase",
+    "ArtifactImporter",
+    "AsyncArtifactImporter",
+    "AnyArtifactImporter",
 ]
