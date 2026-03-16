@@ -14,7 +14,8 @@ Complete API reference for django-snapshots.
 
    settings
    dataclasses
+   protocols
    storage
    connectors
    exceptions
-
+   commands/index
