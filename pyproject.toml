@@ -1,6 +1,6 @@
 [project]
 name = "django-snapshots"
-version = "0.0.0b0"
+version = "0.0.0a0"
 description = "A generic and pluggable backup and restore management utility for Django."
 requires-python = ">=3.10,<4.0"
 authors = [
