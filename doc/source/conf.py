@@ -47,3 +47,7 @@ intersphinx_mapping = {
 }
 
 linkcheck_allow_redirects = True
+
+
+# Use legacy class-based autodoc implementation
+autodoc_use_legacy_class_based = True
