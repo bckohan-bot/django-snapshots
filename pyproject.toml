@@ -90,6 +90,7 @@ docs = [
     "sphinx-autobuild>=2024.10.3",
     "sphinx-tabs>=3.4.7",
     "sphinxcontrib-django>=2.5",
+    "sphinxcontrib-typer[pdf,html]>=0.8.0",
 ]
 psycopg2      = ["psycopg2>=2.9.10"]
 psycopg3      = ["psycopg"]

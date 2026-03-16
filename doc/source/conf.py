@@ -20,6 +20,7 @@ extensions = [
     "sphinx.ext.todo",
     "sphinx_tabs.tabs",
     "sphinx.ext.viewcode",
+    "sphinxcontrib.typer",
 ]
 
 templates_path = ["_templates"]
