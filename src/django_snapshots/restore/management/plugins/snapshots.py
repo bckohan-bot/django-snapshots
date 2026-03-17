@@ -93,21 +93,6 @@ def _resolve_latest(storage) -> str:
     return snapshots[0][1]
 
 
-def _init_restore_state(self, name: Optional[str]) -> None:
-    if not getattr(self, "_restore_initialised", False):
-        snap_settings = cast(SnapshotSettings, django_settings.SNAPSHOTS)
-        self._restore_storage = snap_settings.storage
-        self._restore_name = name
-        self._importers = []
-        self._restore_temp_dir = Path(
-            tempfile.mkdtemp(prefix="django_snapshots_restore_")
-        )
-        self._restore_initialised = True
-    else:
-        if name is not None:
-            self._restore_name = name
-
-
 def _create_database_importers(
     snapshot: Snapshot, databases: Optional[list[str]] = None
 ) -> list[DatabaseArtifactImporter]:
@@ -136,7 +121,14 @@ def restore(
         typer.Option(help=str(_("Snapshot name (default: latest)"))),
     ] = None,
 ) -> None:
-    _init_restore_state(self, name=name)
+    """Initialise restore state (runs before any subcommand)."""
+    snap_settings = cast(SnapshotSettings, django_settings.SNAPSHOTS)
+    self._restore_storage = snap_settings.storage
+    self._restore_name = name
+    self._importers = []
+    self._restore_temp_dir = Path(
+        tempfile.mkdtemp(prefix="django_snapshots_restore_")
+    )
 
 
 @restore.command(help=str(_("Restore database(s) from compressed SQL dumps")))
@@ -154,7 +146,8 @@ def database(
         ),
     ] = None,
 ) -> None:
-    _init_restore_state(self, name=name)
+    if name is not None:
+        self._restore_name = name
     self._importers.append(_DatabasePlaceholder(databases=databases))
 
 
@@ -177,7 +170,8 @@ def media(
         ),
     ] = False,
 ) -> None:
-    _init_restore_state(self, name=name)
+    if name is not None:
+        self._restore_name = name
     self._importers.append(
         MediaArtifactImporter(media_root=media_root or "", merge=merge)
     )
@@ -197,7 +191,8 @@ def environment(
         ),
     ] = False,
 ) -> None:
-    _init_restore_state(self, name=name)
+    if name is not None:
+        self._restore_name = name
     self._importers.append(EnvironmentArtifactImporter(check_only=check_only))
 
 
@@ -211,9 +206,6 @@ class _DatabasePlaceholder:
 @restore.finalize()
 def restore_finalize(self, results: list) -> None:  # noqa: ARG001
     try:
-        if not getattr(self, "_restore_initialised", False):
-            _init_restore_state(self, name=None)
-
         snap_settings = cast(SnapshotSettings, django_settings.SNAPSHOTS)
         storage = self._restore_storage
 
@@ -370,4 +362,3 @@ def restore_finalize(self, results: list) -> None:  # noqa: ARG001
             getattr(self, "_restore_temp_dir", None) or Path("/nonexistent"),
             ignore_errors=True,
         )
-        self._restore_initialised = False

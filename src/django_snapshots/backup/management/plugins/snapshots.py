@@ -68,40 +68,6 @@ def _sha256(path: Path) -> str:
     return h.hexdigest()
 
 
-def _init_backup_state(
-    self,
-    name: Optional[str],
-    overwrite: bool,
-) -> None:
-    """Initialise shared backup state on *self*. Safe to call multiple times.
-
-    The first call sets all defaults.  Subsequent calls (from subcommands) may
-    override ``_backup_name`` and ``_backup_overwrite`` when explicit (non-None /
-    truthy) values are supplied, so that e.g.
-    ``snapshots backup database --name foo`` works even though the group
-    callback ran first with ``name=None``.
-    """
-    if not getattr(self, "_backup_initialised", False):
-        snap_settings = cast(SnapshotSettings, django_settings.SNAPSHOTS)
-        self._backup_storage = snap_settings.storage
-        self._backup_overwrite = overwrite
-
-        now = datetime.now(timezone.utc)
-        self._backup_created_at = now
-        self._backup_name = name or now.strftime("%Y-%m-%dT%H-%M-%S-UTC")
-        self._exporters = cast(list[AnyArtifactExporter], [])
-        self._backup_temp_dir = Path(
-            tempfile.mkdtemp(prefix="django_snapshots_backup_")
-        )
-        self._backup_initialised = True
-    else:
-        # Allow subcommands to override name and overwrite from the group default
-        if name is not None:
-            self._backup_name = name
-        if overwrite:
-            self._backup_overwrite = overwrite
-
-
 # ---------------------------------------------------------------------------
 # Backup group — invoked before any subcommand, handles the no-subcommand case
 # ---------------------------------------------------------------------------
@@ -128,7 +94,17 @@ def backup(
     ] = False,
 ) -> None:
     """Initialise backup state (runs before any subcommand)."""
-    _init_backup_state(self, name=name, overwrite=overwrite)
+    snap_settings = cast(SnapshotSettings, django_settings.SNAPSHOTS)
+    self._backup_storage = snap_settings.storage
+    self._backup_overwrite = overwrite
+
+    now = datetime.now(timezone.utc)
+    self._backup_created_at = now
+    self._backup_name = name or now.strftime("%Y-%m-%dT%H-%M-%S-UTC")
+    self._exporters = cast(list[AnyArtifactExporter], [])
+    self._backup_temp_dir = Path(
+        tempfile.mkdtemp(prefix="django_snapshots_backup_")
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -195,7 +171,10 @@ def database(
         ),
     ] = None,
 ) -> None:
-    _init_backup_state(self, name=name, overwrite=overwrite)
+    if name is not None:
+        self._backup_name = name
+    if overwrite:
+        self._backup_overwrite = overwrite
     _add_database_exporters(self, databases=databases, connector=connector)
 
 
@@ -217,7 +196,10 @@ def media(
         typer.Option("--media-root", help=str(_("Override MEDIA_ROOT path"))),
     ] = None,
 ) -> None:
-    _init_backup_state(self, name=name, overwrite=overwrite)
+    if name is not None:
+        self._backup_name = name
+    if overwrite:
+        self._backup_overwrite = overwrite
     _add_media_exporters(self, media_root=media_root)
 
 
@@ -235,7 +217,10 @@ def environment(
         ),
     ] = False,
 ) -> None:
-    _init_backup_state(self, name=name, overwrite=overwrite)
+    if name is not None:
+        self._backup_name = name
+    if overwrite:
+        self._backup_overwrite = overwrite
     _add_environment_exporters(self)
 
 
@@ -248,10 +233,6 @@ def environment(
 def backup_finalize(self, results: list) -> None:  # noqa: ARG001
     """Check for collision, generate artifacts, compute checksums, write manifest."""
     try:
-        # Guard: _init_backup_state should always have been called by now
-        if not getattr(self, "_backup_initialised", False):
-            _init_backup_state(self, name=None, overwrite=False)
-
         exporters = list(self._exporters)
 
         # Check for name collision (deferred to finalize so --name on subcommand works)
@@ -360,5 +341,3 @@ def backup_finalize(self, results: list) -> None:  # noqa: ARG001
             getattr(self, "_backup_temp_dir", None) or Path("/nonexistent"),
             ignore_errors=True,
         )
-        # Reset initialised flag for any potential re-use
-        self._backup_initialised = False
