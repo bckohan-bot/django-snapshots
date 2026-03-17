@@ -115,11 +115,11 @@ def test_media_exporter_creates_targz(tmp_path):
     media_root.mkdir()
     (media_root / "image.png").write_bytes(b"\x89PNG")
 
-    exp = MediaArtifactExporter(media_root=str(media_root))
+    exp = MediaArtifactExporter(directory=str(media_root))
 
     assert exp.artifact_type == "media"
     assert exp.filename == "media.tar.gz"
-    assert exp.metadata["media_root"] == str(media_root)
+    assert exp.metadata["directory"] == str(media_root)
 
     dest = tmp_path / exp.filename
     # Call the sync implementation directly to avoid asyncio.run() conflicts
@@ -140,7 +140,7 @@ def test_media_exporter_empty_media_root_creates_valid_archive(tmp_path):
     from django_snapshots.backup.artifacts.media import MediaArtifactExporter
 
     missing = tmp_path / "missing_media"
-    exp = MediaArtifactExporter(media_root=str(missing))
+    exp = MediaArtifactExporter(directory=str(missing))
     dest = tmp_path / exp.filename
     exp._create_tar(dest)
 

@@ -107,7 +107,7 @@ def _add_media_exporters(
     self,
     media_root: Optional[str] = None,
 ) -> None:
-    self._exporters.append(MediaArtifactExporter(media_root=media_root or ""))
+    self._exporters.append(MediaArtifactExporter(directory=media_root or ""))
 
 
 def _add_environment_exporters(self) -> None:

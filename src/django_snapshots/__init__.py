@@ -33,6 +33,8 @@ from django_snapshots.artifacts import (
     ArtifactImporterBase,
     AsyncArtifactExporter,
     AsyncArtifactImporter,
+    DirectoryArtifactExporter,
+    DirectoryArtifactImporter,
 )
 from django_snapshots.connectors import (
     DatabaseConnector,
@@ -108,6 +110,9 @@ __all__ = [
     "ArtifactImporter",
     "AsyncArtifactImporter",
     "AnyArtifactImporter",
+    # Directory Artifact Base Classes
+    "DirectoryArtifactExporter",
+    "DirectoryArtifactImporter",
     # Artifact Importers
     "DatabaseArtifactImporter",
     "EnvironmentArtifactImporter",

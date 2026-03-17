@@ -100,7 +100,7 @@ def test_media_importer_satisfies_async_artifact_importer_protocol():
     MediaArtifactImporter = mod.MediaArtifactImporter
     from django_snapshots.artifacts.protocols import AsyncArtifactImporter
 
-    imp = MediaArtifactImporter(media_root="/tmp/media")
+    imp = MediaArtifactImporter(directory="/tmp/media")
     assert isinstance(imp, AsyncArtifactImporter)
 
 
@@ -110,7 +110,7 @@ def test_media_importer_artifact_type():
     mod = importlib.import_module("django_snapshots.restore.artifacts.media")
     MediaArtifactImporter = mod.MediaArtifactImporter
 
-    imp = MediaArtifactImporter(media_root="/tmp/media")
+    imp = MediaArtifactImporter(directory="/tmp/media")
     assert imp.artifact_type == "media"
     assert imp.filename == "media.tar.gz"
 
@@ -129,7 +129,7 @@ def test_media_importer_replace_mode_clears_existing_files(tmp_path):
     (src_media / "keep.txt").write_text("hello")
 
     # Create archive from src_media
-    exp = MediaArtifactExporter(media_root=str(src_media))
+    exp = MediaArtifactExporter(directory=str(src_media))
     archive = tmp_path / "media.tar.gz"
     exp._create_tar(archive)
 
@@ -139,7 +139,7 @@ def test_media_importer_replace_mode_clears_existing_files(tmp_path):
     (dst_media / "stale.txt").write_text("stale")
 
     # Replace restore
-    imp = MediaArtifactImporter(media_root=str(dst_media), merge=False)
+    imp = MediaArtifactImporter(directory=str(dst_media), merge=False)
     imp._extract_tar(archive)
 
     assert (dst_media / "keep.txt").exists()
@@ -158,7 +158,7 @@ def test_media_importer_merge_mode_preserves_existing_files(tmp_path):
     src_media.mkdir()
     (src_media / "from_archive.txt").write_text("archive content")
 
-    exp = MediaArtifactExporter(media_root=str(src_media))
+    exp = MediaArtifactExporter(directory=str(src_media))
     archive = tmp_path / "media.tar.gz"
     exp._create_tar(archive)
 
@@ -167,7 +167,7 @@ def test_media_importer_merge_mode_preserves_existing_files(tmp_path):
     (dst_media / "existing.txt").write_text("existing content")
 
     # Merge restore
-    imp = MediaArtifactImporter(media_root=str(dst_media), merge=True)
+    imp = MediaArtifactImporter(directory=str(dst_media), merge=True)
     imp._extract_tar(archive)
 
     assert (dst_media / "from_archive.txt").exists()
@@ -183,13 +183,13 @@ def test_media_importer_empty_archive_does_not_error(tmp_path):
     from django_snapshots.backup.artifacts.media import MediaArtifactExporter
 
     src_media = tmp_path / "missing"  # doesn't exist
-    exp = MediaArtifactExporter(media_root=str(src_media))
+    exp = MediaArtifactExporter(directory=str(src_media))
     archive = tmp_path / "media.tar.gz"
     exp._create_tar(archive)  # creates empty archive
 
     dst_media = tmp_path / "dst_media"
     dst_media.mkdir()
-    imp = MediaArtifactImporter(media_root=str(dst_media), merge=False)
+    imp = MediaArtifactImporter(directory=str(dst_media), merge=False)
     imp._extract_tar(archive)  # should not raise
 
 

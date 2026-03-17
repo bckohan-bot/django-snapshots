@@ -231,7 +231,7 @@ def test_import_media_merge_preserves_stale_files(tmp_path, settings):
     src = tmp_path / "src_media"
     src.mkdir()
     (src / "archive_file.txt").write_text("from archive")
-    exp = MediaArtifactExporter(media_root=str(src))
+    exp = MediaArtifactExporter(directory=str(src))
     archive = tmp_path / "storage" / "merge-snap"
     archive.mkdir(parents=True)
     asyncio.run(exp.generate(archive / exp.filename))

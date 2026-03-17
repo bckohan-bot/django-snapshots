@@ -145,7 +145,7 @@ def media(
     if name is not None:
         self._restore_name = name
     self._importers.append(
-        MediaArtifactImporter(media_root=media_root or "", merge=merge)
+        MediaArtifactImporter(directory=media_root or "", merge=merge)
     )
 
 
@@ -213,7 +213,7 @@ def restore_finalize(self, results: list) -> None:  # noqa: ARG001
             ]
             _factories = {
                 "database": lambda: _create_database_importers(snapshot),
-                "media": lambda: [MediaArtifactImporter(media_root="")],
+                "media": lambda: [MediaArtifactImporter(directory="")],
                 "environment": lambda: [EnvironmentArtifactImporter()],
             }
             for artifact_name in defaults:
@@ -260,7 +260,7 @@ def restore_finalize(self, results: list) -> None:  # noqa: ARG001
                 i.db_alias for i in importers if isinstance(i, DatabaseArtifactImporter)
             ]
             media_roots = [
-                i.media_root for i in importers if isinstance(i, MediaArtifactImporter)
+                i.directory for i in importers if isinstance(i, MediaArtifactImporter)
             ]
             lines = [f"Restore snapshot {name!r}?"]
             if db_aliases:
