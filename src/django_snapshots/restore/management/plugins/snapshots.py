@@ -1,4 +1,4 @@
-"""Import command group — registered as a plugin on the root ``snapshots`` command."""
+"""Restore command group — registered as a plugin on the root ``snapshots`` command."""
 
 from __future__ import annotations
 
@@ -93,19 +93,19 @@ def _resolve_latest(storage) -> str:
     return snapshots[0][1]
 
 
-def _init_import_state(self, name: Optional[str]) -> None:
-    if not getattr(self, "_import_initialised", False):
+def _init_restore_state(self, name: Optional[str]) -> None:
+    if not getattr(self, "_restore_initialised", False):
         snap_settings = cast(SnapshotSettings, django_settings.SNAPSHOTS)
-        self._import_storage = snap_settings.storage
-        self._import_name = name
+        self._restore_storage = snap_settings.storage
+        self._restore_name = name
         self._importers = []
-        self._import_temp_dir = Path(
-            tempfile.mkdtemp(prefix="django_snapshots_import_")
+        self._restore_temp_dir = Path(
+            tempfile.mkdtemp(prefix="django_snapshots_restore_")
         )
-        self._import_initialised = True
+        self._restore_initialised = True
     else:
         if name is not None:
-            self._import_name = name
+            self._restore_name = name
 
 
 def _create_database_importers(
@@ -123,12 +123,12 @@ def _create_database_importers(
 
 
 @SnapshotsCommand.group(
-    name="import",
+    name="restore",
     invoke_without_command=True,
     chain=True,
-    help=str(_("Import a snapshot")),
+    help=str(_("Restore a snapshot")),
 )
-def import_cmd(
+def restore(
     self,
     ctx: typer.Context,
     name: Annotated[
@@ -136,10 +136,10 @@ def import_cmd(
         typer.Option(help=str(_("Snapshot name (default: latest)"))),
     ] = None,
 ) -> None:
-    _init_import_state(self, name=name)
+    _init_restore_state(self, name=name)
 
 
-@import_cmd.command(help=str(_("Restore database(s) from compressed SQL dumps")))
+@restore.command(help=str(_("Restore database(s) from compressed SQL dumps")))
 def database(
     self,
     name: Annotated[
@@ -154,11 +154,11 @@ def database(
         ),
     ] = None,
 ) -> None:
-    _init_import_state(self, name=name)
+    _init_restore_state(self, name=name)
     self._importers.append(_DatabasePlaceholder(databases=databases))
 
 
-@import_cmd.command(help=str(_("Restore MEDIA_ROOT from compressed tarball")))
+@restore.command(help=str(_("Restore MEDIA_ROOT from compressed tarball")))
 def media(
     self,
     name: Annotated[
@@ -177,13 +177,13 @@ def media(
         ),
     ] = False,
 ) -> None:
-    _init_import_state(self, name=name)
+    _init_restore_state(self, name=name)
     self._importers.append(
         MediaArtifactImporter(media_root=media_root or "", merge=merge)
     )
 
 
-@import_cmd.command(help=str(_("Show diff between snapshot environment and current")))
+@restore.command(help=str(_("Show diff between snapshot environment and current")))
 def environment(
     self,
     name: Annotated[
@@ -197,7 +197,7 @@ def environment(
         ),
     ] = False,
 ) -> None:
-    _init_import_state(self, name=name)
+    _init_restore_state(self, name=name)
     self._importers.append(EnvironmentArtifactImporter(check_only=check_only))
 
 
@@ -208,17 +208,17 @@ class _DatabasePlaceholder:
         self.databases = databases
 
 
-@import_cmd.finalize()
-def import_finalize(self, results: list) -> None:  # noqa: ARG001
+@restore.finalize()
+def restore_finalize(self, results: list) -> None:  # noqa: ARG001
     try:
-        if not getattr(self, "_import_initialised", False):
-            _init_import_state(self, name=None)
+        if not getattr(self, "_restore_initialised", False):
+            _init_restore_state(self, name=None)
 
         snap_settings = cast(SnapshotSettings, django_settings.SNAPSHOTS)
-        storage = self._import_storage
+        storage = self._restore_storage
 
         # Step 1: Resolve snapshot name
-        name = self._import_name
+        name = self._restore_name
         if name is None:
             name = _resolve_latest(storage)
         elif not storage.exists(f"{name}/manifest.json"):
@@ -284,7 +284,7 @@ def import_finalize(self, results: list) -> None:  # noqa: ARG001
                 (a for a in snapshot.artifacts if a.type == "environment"), None
             )
             if env_art:
-                env_dest = self._import_temp_dir / env_art.filename
+                env_dest = self._restore_temp_dir / env_art.filename
                 with storage.read(f"{name}/{env_art.filename}") as f:
                     env_dest.write_bytes(f.read())
                 check_only_imp.restore(env_dest)
@@ -330,7 +330,7 @@ def import_finalize(self, results: list) -> None:  # noqa: ARG001
             loop = asyncio.get_running_loop()
             tasks = [
                 loop.run_in_executor(
-                    None, _download_one, filename, self._import_temp_dir / filename
+                    None, _download_one, filename, self._restore_temp_dir / filename
                 )
                 for _, filename in pairs
             ]
@@ -340,7 +340,7 @@ def import_finalize(self, results: list) -> None:  # noqa: ARG001
 
         # Step 6: Verify checksums (all-or-nothing)
         for _, filename in pairs:
-            dest = self._import_temp_dir / filename
+            dest = self._restore_temp_dir / filename
             expected = artifact_map[filename].checksum
             actual = f"sha256:{_sha256(dest)}"
             if actual != expected:
@@ -354,7 +354,7 @@ def import_finalize(self, results: list) -> None:  # noqa: ARG001
             loop = asyncio.get_running_loop()
             tasks = []
             for imp, filename in pairs:
-                src = self._import_temp_dir / filename
+                src = self._restore_temp_dir / filename
                 if asyncio.iscoroutinefunction(imp.restore):
                     tasks.append(imp.restore(src))
                 else:
@@ -367,7 +367,7 @@ def import_finalize(self, results: list) -> None:  # noqa: ARG001
 
     finally:
         shutil.rmtree(
-            getattr(self, "_import_temp_dir", None) or Path("/nonexistent"),
+            getattr(self, "_restore_temp_dir", None) or Path("/nonexistent"),
             ignore_errors=True,
         )
-        self._import_initialised = False
+        self._restore_initialised = False
