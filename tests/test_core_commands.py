@@ -11,10 +11,9 @@ from django_snapshots.settings import PruneConfig, SnapshotSettings
 from django_snapshots.storage.local import LocalFileSystemBackend
 
 
-def _make_settings(tmp_path, *, default_artifacts=None):
+def _make_settings(tmp_path):
     return SnapshotSettings(
         storage=LocalFileSystemBackend(location=str(tmp_path / "storage")),
-        default_artifacts=default_artifacts or ["environment"],
     )
 
 
@@ -22,7 +21,7 @@ def _backup_snap(snap_settings, name):
     from django.core.management import call_command
 
     with override_settings(SNAPSHOTS=snap_settings):
-        call_command("snapshots", "backup", "--name", name)
+        call_command("snapshots", "backup", "environment", "--name", name)
 
 
 # ---------------------------------------------------------------------------
@@ -531,7 +530,6 @@ def test_prune_uses_settings_default(tmp_path):
     snap_settings = _make_settings(tmp_path)
     snap_settings = SnapshotSettings(
         storage=snap_settings.storage,
-        default_artifacts=["environment"],
         prune=PruneConfig(keep=1),
     )
     _backup_snap(snap_settings, "old-snap")

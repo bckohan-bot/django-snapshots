@@ -19,7 +19,6 @@ from tqdm.asyncio import tqdm as async_tqdm
 
 from django_snapshots.exceptions import (
     SnapshotEncryptionError,
-    SnapshotError,
     SnapshotIntegrityError,
     SnapshotNotFoundError,
 )
@@ -93,14 +92,26 @@ def restore(
         typer.Option(help=str(_("Snapshot name (default: latest)"))),
     ] = None,
 ) -> None:
-    """Initialise restore state (runs before any subcommand)."""
+    """Initialise restore state and load manifest (runs before any subcommand)."""
     snap_settings = cast(SnapshotSettings, django_settings.SNAPSHOTS)
     self._restore_storage = snap_settings.storage
-    self._restore_name = name
     self._importers = []
     self._restore_temp_dir = Path(
         tempfile.mkdtemp(prefix="django_snapshots_restore_")
     )
+    try:
+        resolved_name = name or _resolve_latest(self._restore_storage)
+        if not self._restore_storage.exists(f"{resolved_name}/manifest.json"):
+            raise SnapshotNotFoundError(
+                f"Snapshot {resolved_name!r} not found in storage "
+                f"(missing '{resolved_name}/manifest.json')."
+            )
+        with self._restore_storage.read(f"{resolved_name}/manifest.json") as f:
+            self._restore_snapshot = Snapshot.from_dict(json.load(f))
+        self._restore_name = resolved_name
+    except Exception:
+        shutil.rmtree(self._restore_temp_dir, ignore_errors=True)
+        raise
 
 
 @restore.command(help=str(_("Restore database(s) from compressed SQL dumps")))
@@ -119,8 +130,20 @@ def database(
     ] = None,
 ) -> None:
     if name is not None:
+        # User wants a different snapshot — re-resolve
+        if not self._restore_storage.exists(f"{name}/manifest.json"):
+            raise SnapshotNotFoundError(
+                f"Snapshot {name!r} not found in storage "
+                f"(missing '{name}/manifest.json')."
+            )
         self._restore_name = name
-    self._importers.append(_DatabasePlaceholder(databases=databases))
+        with self._restore_storage.read(f"{name}/manifest.json") as f:
+            self._restore_snapshot = Snapshot.from_dict(json.load(f))
+    importers = _create_database_importers(self._restore_snapshot, databases=databases)
+    self._importers.extend(importers)
+    if sys.stdin.isatty():
+        aliases = [i.db_alias for i in importers]
+        typer.echo(f"  Databases : {', '.join(aliases)}")
 
 
 @restore.command(help=str(_("Restore MEDIA_ROOT from compressed tarball")))
@@ -147,6 +170,9 @@ def media(
     self._importers.append(
         MediaArtifactImporter(directory=media_root or "", merge=merge)
     )
+    if sys.stdin.isatty():
+        imp = self._importers[-1]
+        typer.echo(f"  Directory : {imp.directory}")
 
 
 @restore.command(help=str(_("Show diff between snapshot environment and current")))
@@ -166,34 +192,16 @@ def environment(
     if name is not None:
         self._restore_name = name
     self._importers.append(EnvironmentArtifactImporter(check_only=check_only))
-
-
-class _DatabasePlaceholder:
-    artifact_type = "database"
-
-    def __init__(self, databases: Optional[list[str]]) -> None:
-        self.databases = databases
+    if sys.stdin.isatty():
+        typer.echo("  Environment: will check pip diff")
 
 
 @restore.finalize()
 def restore_finalize(self, results: list) -> None:  # noqa: ARG001
     try:
-        snap_settings = cast(SnapshotSettings, django_settings.SNAPSHOTS)
         storage = self._restore_storage
-
-        # Step 1: Resolve snapshot name
         name = self._restore_name
-        if name is None:
-            name = _resolve_latest(storage)
-        elif not storage.exists(f"{name}/manifest.json"):
-            raise SnapshotNotFoundError(
-                f"Snapshot {name!r} not found in storage "
-                f"(missing '{name}/manifest.json')."
-            )
-
-        # Step 2: Read and validate manifest
-        with storage.read(f"{name}/manifest.json") as f:
-            snapshot = Snapshot.from_dict(json.load(f))
+        snapshot = self._restore_snapshot
 
         if snapshot.encrypted:
             raise SnapshotEncryptionError(
@@ -202,37 +210,13 @@ def restore_finalize(self, results: list) -> None:  # noqa: ARG001
 
         artifact_map = {a.filename: a for a in snapshot.artifacts}
 
-        # Step 3: Materialise placeholders and handle no-subcommand default
-        raw_importers = list(self._importers)
+        # Step 3: Handle no-subcommand default — invoke all registered children
+        if not self._importers:
+            restore_group = self.get_subcommand("restore")
+            for _child_name, child_cmd in restore_group.children.items():
+                child_cmd()
 
-        if not raw_importers:
-            defaults = snap_settings.default_artifacts or [
-                "database",
-                "media",
-                "environment",
-            ]
-            _factories = {
-                "database": lambda: _create_database_importers(snapshot),
-                "media": lambda: [MediaArtifactImporter(directory="")],
-                "environment": lambda: [EnvironmentArtifactImporter()],
-            }
-            for artifact_name in defaults:
-                if artifact_name not in _factories:
-                    raise SnapshotError(
-                        f"Unknown default artifact {artifact_name!r}. "
-                        f"Registered: {list(_factories)}"
-                    )
-                self._importers.extend(_factories[artifact_name]())
-            raw_importers = list(self._importers)
-
-        importers: list = []
-        for imp in raw_importers:
-            if isinstance(imp, _DatabasePlaceholder):
-                importers.extend(
-                    _create_database_importers(snapshot, databases=imp.databases)
-                )
-            else:
-                importers.append(imp)
+        importers: list = list(self._importers)
 
         # Handle --check-only
         check_only_imp = next(
@@ -256,19 +240,7 @@ def restore_finalize(self, results: list) -> None:  # noqa: ARG001
 
         # Step 4: Confirmation prompt (TTY only)
         if sys.stdin.isatty():
-            db_aliases = [
-                i.db_alias for i in importers if isinstance(i, DatabaseArtifactImporter)
-            ]
-            media_roots = [
-                i.directory for i in importers if isinstance(i, MediaArtifactImporter)
-            ]
-            lines = [f"Restore snapshot {name!r}?"]
-            if db_aliases:
-                lines.append(f"  Databases : {', '.join(db_aliases)}")
-            if media_roots:
-                lines.append(f"  MEDIA_ROOT: {', '.join(media_roots)}")
-            lines.append("Continue? [y/N] ")
-            answer = input("\n".join(lines))
+            answer = input(f"Restore snapshot {name!r}? Continue? [y/N] ")
             if answer.strip().lower() != "y":
                 raise SystemExit(0)
 

@@ -12,19 +12,19 @@ from django_snapshots.settings import SnapshotSettings
 from django_snapshots.storage.local import LocalFileSystemBackend
 
 
-def _make_settings(tmp_path, *, default_artifacts=None):
+def _make_settings(tmp_path):
     return SnapshotSettings(
         storage=LocalFileSystemBackend(location=str(tmp_path / "storage")),
-        default_artifacts=default_artifacts or ["database", "environment"],
     )
 
 
-def _backup_snap(snap_settings, name):
+def _backup_snap(snap_settings, name, *subcommands):
     """Helper: run a full export so import tests have something to work with."""
     from django.core.management import call_command
 
+    subcommands = subcommands or ("database", "environment")
     with override_settings(SNAPSHOTS=snap_settings):
-        call_command("snapshots", "backup", "--name", name)
+        call_command("snapshots", "backup", *subcommands, "--name", name)
 
 
 @pytest.mark.skipif(
@@ -54,10 +54,10 @@ def test_import_latest_resolution(tmp_path, capsys):
     """Importing without --name resolves the most recent snapshot."""
     from django.core.management import call_command
 
-    snap_settings = _make_settings(tmp_path, default_artifacts=["environment"])
+    snap_settings = _make_settings(tmp_path)
 
-    _backup_snap(snap_settings, "old-snap")
-    _backup_snap(snap_settings, "new-snap")
+    _backup_snap(snap_settings, "old-snap", "environment")
+    _backup_snap(snap_settings, "new-snap", "environment")
 
     with override_settings(SNAPSHOTS=snap_settings):
         call_command("snapshots", "restore")
@@ -92,9 +92,9 @@ def test_import_subcommand_selection_only_restores_selected(tmp_path):
     """Running `snapshots import environment` only restores the environment artifact."""
     from django.core.management import call_command
 
-    snap_settings = _make_settings(tmp_path, default_artifacts=["environment"])
+    snap_settings = _make_settings(tmp_path)
 
-    _backup_snap(snap_settings, "sel-snap")
+    _backup_snap(snap_settings, "sel-snap", "environment")
 
     with override_settings(SNAPSHOTS=snap_settings):
         call_command("snapshots", "restore", "environment", "--name", "sel-snap")
@@ -107,8 +107,8 @@ def test_import_raises_snapshot_integrity_error_on_corrupt_artifact(tmp_path):
 
     from django_snapshots.exceptions import SnapshotIntegrityError
 
-    snap_settings = _make_settings(tmp_path, default_artifacts=["environment"])
-    _backup_snap(snap_settings, "corrupt-snap")
+    snap_settings = _make_settings(tmp_path)
+    _backup_snap(snap_settings, "corrupt-snap", "environment")
 
     storage = LocalFileSystemBackend(location=str(tmp_path / "storage"))
     storage.write(
@@ -127,8 +127,8 @@ def test_import_skips_confirmation_when_not_tty(tmp_path, monkeypatch):
 
     monkeypatch.setattr("sys.stdin.isatty", lambda: False)
 
-    snap_settings = _make_settings(tmp_path, default_artifacts=["environment"])
-    _backup_snap(snap_settings, "notty-snap")
+    snap_settings = _make_settings(tmp_path)
+    _backup_snap(snap_settings, "notty-snap", "environment")
 
     with override_settings(SNAPSHOTS=snap_settings):
         call_command("snapshots", "restore", "--name", "notty-snap")
@@ -139,8 +139,8 @@ def test_import_prompts_and_aborts_when_tty_and_declined(tmp_path, monkeypatch):
     """When stdin is a TTY and user says 'n', import aborts cleanly."""
     from django.core.management import call_command
 
-    snap_settings = _make_settings(tmp_path, default_artifacts=["environment"])
-    _backup_snap(snap_settings, "tty-snap")
+    snap_settings = _make_settings(tmp_path)
+    _backup_snap(snap_settings, "tty-snap", "environment")
 
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
     monkeypatch.setattr("builtins.input", lambda _: "n")
@@ -175,8 +175,8 @@ def test_import_raises_on_encrypted_manifest(tmp_path):
 
     from django_snapshots.exceptions import SnapshotEncryptionError
 
-    snap_settings = _make_settings(tmp_path, default_artifacts=["environment"])
-    _backup_snap(snap_settings, "enc-snap")
+    snap_settings = _make_settings(tmp_path)
+    _backup_snap(snap_settings, "enc-snap", "environment")
 
     storage = LocalFileSystemBackend(location=str(tmp_path / "storage"))
     manifest = json.loads(storage.read("enc-snap/manifest.json").read())
@@ -196,8 +196,8 @@ def test_import_environment_check_only(tmp_path, capsys):
     """--check-only prints the diff and exits without touching DB or media."""
     from django.core.management import call_command
 
-    snap_settings = _make_settings(tmp_path, default_artifacts=["environment"])
-    _backup_snap(snap_settings, "co-snap")
+    snap_settings = _make_settings(tmp_path)
+    _backup_snap(snap_settings, "co-snap", "environment")
 
     with override_settings(SNAPSHOTS=snap_settings):
         try:
@@ -239,8 +239,8 @@ def test_import_media_merge_preserves_stale_files(tmp_path, settings):
     # Add a stale file to media_root
     (media_dir / "stale.txt").write_text("stale content")
 
-    snap_settings = _make_settings(tmp_path, default_artifacts=["media"])
-    _backup_snap(snap_settings, "merge-snap")
+    snap_settings = _make_settings(tmp_path)
+    _backup_snap(snap_settings, "merge-snap", "media")
 
     with override_settings(SNAPSHOTS=snap_settings, MEDIA_ROOT=str(media_dir)):
         call_command("snapshots", "restore", "media", "--merge", "--name", "merge-snap")
@@ -258,8 +258,8 @@ def test_import_media_replace_removes_stale_files(tmp_path, settings):
     settings.MEDIA_ROOT = str(media_dir)
 
     # Export with an empty media_dir (no stale file yet)
-    snap_settings = _make_settings(tmp_path, default_artifacts=["media"])
-    _backup_snap(snap_settings, "replace-snap")
+    snap_settings = _make_settings(tmp_path)
+    _backup_snap(snap_settings, "replace-snap", "media")
 
     # Add a stale file AFTER the snapshot was taken
     (media_dir / "stale.txt").write_text("stale content")

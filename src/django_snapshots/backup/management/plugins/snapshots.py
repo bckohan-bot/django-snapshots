@@ -217,28 +217,11 @@ def backup_finalize(self, results: list) -> None:  # noqa: ARG001
                 "Use --overwrite to replace it."
             )
 
-        # If no subcommands ran (invoke_without_command), use default_artifacts
+        # If no subcommands ran (invoke_without_command), invoke all registered children
         if not exporters:
-            snap_settings = cast(SnapshotSettings, django_settings.SNAPSHOTS)
-            defaults = snap_settings.default_artifacts or [
-                "database",
-                "media",
-                "environment",
-            ]
-            _factories = {
-                "database": lambda: _add_database_exporters(self),
-                "media": lambda: _add_media_exporters(self),
-                "environment": lambda: _add_environment_exporters(self),
-            }
-            for artifact_name in defaults:
-                if artifact_name not in _factories:
-                    from django_snapshots.exceptions import SnapshotError
-
-                    raise SnapshotError(
-                        f"Unknown default artifact {artifact_name!r}. "
-                        f"Registered: {list(_factories)}"
-                    )
-                _factories[artifact_name]()
+            backup_group = self.get_subcommand("backup")
+            for _child_name, child_cmd in backup_group.children.items():
+                child_cmd()
             exporters = list(self._exporters)
 
         # ------------------------------------------------------------------ #
