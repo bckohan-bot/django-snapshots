@@ -16,10 +16,10 @@ We provide a platform independent justfile with recipes for all the development 
 just setup <python version>
 ```
 
-**This will also install pre-commit** If you wish to submit code that does not pass pre-commit checks you can disable pre-commit by running:
+**This will also install prek** If you wish to submit code that does not pass pre-commit checks you can disable prek by running:
 
 ```sh
-just run pre-commit uninstall
+just run prek uninstall
 ```
 
 ### Install the Dev environment
@@ -146,12 +146,12 @@ fetch-refs LIB               # fetch intersphinx references for the given packag
 fix *ENV                     # fix formatting, linting issues and import sorting
 format *ENV                  # format the code and sort imports
 install *OPTS="--all-extras" # update and install development dependencies
-install-precommit            # install git pre-commit hooks
+install-prek                 # install git pre-commit hooks
 install-uv                   # install the uv package manager
 lint *ENV                    # sort imports and fix linting issues
 manage *COMMAND              # run the django admin
 open-docs                    # open the html documentation
-precommit                    # run the pre-commit checks
+prek                         # run the pre-commit checks
 release VERSION              # issue a release for the given semver string (e.g. 1.0.0)
 run +ARGS                    # run the command in the virtual environment
 setup python="python"        # setup the venv and pre-commit hooks
