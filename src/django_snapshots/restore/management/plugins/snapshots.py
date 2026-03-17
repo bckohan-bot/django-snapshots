@@ -8,11 +8,11 @@ import json
 import shutil
 import sys
 import tempfile
-import threading
 from pathlib import Path
-from typing import Annotated, Callable, List, Optional, cast
+from typing import Annotated, List, Optional, cast
 
 import typer
+from asyncer import syncify
 from django.conf import settings as django_settings
 from django.utils.translation import gettext_lazy as _
 from tqdm.asyncio import tqdm as async_tqdm
@@ -30,34 +30,6 @@ from django_snapshots.settings import SnapshotSettings
 from ...artifacts.database import DatabaseArtifactImporter
 from ...artifacts.environment import EnvironmentArtifactImporter
 from ...artifacts.media import MediaArtifactImporter
-
-
-def _run_async(fn: Callable[[], object]) -> None:
-    """Call ``fn()`` (which returns a coroutine) and run it to completion.
-
-    Falls back to a background thread when an event loop is already running
-    (e.g. inside pytest-playwright), so ``asyncio.run()`` never raises
-    *RuntimeError: asyncio.run() cannot be called from a running event loop*.
-    """
-    try:
-        asyncio.get_running_loop()
-        # Already inside a running loop — run in a dedicated thread.
-        exc: list[BaseException] = []
-
-        def _target() -> None:
-            try:
-                asyncio.run(fn())  # type: ignore[arg-type]
-            except BaseException as e:  # noqa: BLE001
-                exc.append(e)
-
-        t = threading.Thread(target=_target, daemon=True)
-        t.start()
-        t.join()
-        if exc:
-            raise exc[0]
-    except RuntimeError:
-        # No running loop — safe to use asyncio.run() directly.
-        asyncio.run(fn())  # type: ignore[arg-type]
 
 
 def _sha256(path: Path) -> str:
@@ -328,7 +300,7 @@ def restore_finalize(self, results: list) -> None:  # noqa: ARG001
             ]
             await async_tqdm.gather(*tasks, desc="Downloading artifacts")
 
-        _run_async(_gather_downloads)
+        syncify(_gather_downloads, raise_sync_error=False)()
 
         # Step 6: Verify checksums (all-or-nothing)
         for _, filename in pairs:
@@ -353,7 +325,7 @@ def restore_finalize(self, results: list) -> None:  # noqa: ARG001
                     tasks.append(loop.run_in_executor(None, imp.restore, src))
             await async_tqdm.gather(*tasks, desc="Restoring artifacts")
 
-        _run_async(_gather_restores)
+        syncify(_gather_restores, raise_sync_error=False)()
 
         typer.echo(f"Snapshot restored: {name}")
 
